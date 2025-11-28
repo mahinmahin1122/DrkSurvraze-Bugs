@@ -90,7 +90,7 @@ client.on('interactionCreate', async (interaction) => {
     }
 });
 
-// Handle bug report modal submission - FIXED VERSION
+// Handle bug report modal submission - UPDATED VERSION
 client.on('interactionCreate', async (interaction) => {
     if (!interaction.isModalSubmit()) return;
 
@@ -130,7 +130,7 @@ client.on('interactionCreate', async (interaction) => {
             ephemeral: true
         });
 
-        // ✅ FIXED: Send to bug channel - SIMPLIFIED VERSION
+        // ✅ UPDATED: Send to bug channel with @everyone mention
         try {
             console.log(`📤 Attempting to send to channel: ${BUG_CHANNEL_ID}`);
             
@@ -138,7 +138,6 @@ client.on('interactionCreate', async (interaction) => {
             
             if (!bugChannel) {
                 console.log(`❌ Channel not found in cache. Fetching...`);
-                // Try to fetch the channel
                 const fetchedChannel = await client.channels.fetch(BUG_CHANNEL_ID).catch(console.error);
                 if (fetchedChannel) {
                     console.log(`✅ Channel fetched: ${fetchedChannel.name}`);
@@ -159,9 +158,9 @@ client.on('interactionCreate', async (interaction) => {
                 )
                 .setTimestamp();
 
-            // Try simple message first
+            // ✅ CHANGED: Removed "NEW BUG REPORT" text and added @everyone mention only
             const sentMessage = await bugChannel.send({
-                content: `**🐛 NEW BUG REPORT**\nID: \`${bugId}\``,
+                content: `@everyone`, // ✅ শুধু mention, অন্য text নেই
                 embeds: [bugEmbed]
             });
 
@@ -169,15 +168,11 @@ client.on('interactionCreate', async (interaction) => {
             
         } catch (error) {
             console.error('❌ ERROR sending to bug channel:', error);
-            console.log('💡 Possible issues:');
-            console.log('1. Channel ID wrong');
-            console.log('2. Bot no permission');
-            console.log('3. Channel not accessible');
         }
     }
 });
 
-// Admin commands (simplified)
+// Admin commands
 client.on('messageCreate', async (message) => {
     if (message.content.startsWith('/') && !message.author.bot) {
         const args = message.content.slice(1).split(' ');
