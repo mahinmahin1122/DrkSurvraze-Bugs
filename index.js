@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, ActionRowBuilder, StringSelectMenuBuilder, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ButtonBuilder, ButtonStyle, PermissionsBitField } = require('discord.js');
+const { Client, GatewayIntentBits, ActionRowBuilder, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ButtonBuilder, ButtonStyle } = require('discord.js');
 require('dotenv').config();
 
 const client = new Client({
@@ -7,7 +7,6 @@ const client = new Client({
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.GuildMembers,
-        GatewayIntentBits.GuildMessageTyping,
         GatewayIntentBits.DirectMessages
     ]
 });
@@ -22,7 +21,7 @@ client.once('ready', () => {
 
 // Handle bug report command
 client.on('messageCreate', async (message) => {
-    if (message.content === '!bug' && message.author.bot === false) {
+    if (message.content === '!bug' && !message.author.bot) {
         console.log(`🐛 Bug command received from ${message.author.tag}`);
         
         const embed = new EmbedBuilder()
@@ -46,7 +45,7 @@ client.on('messageCreate', async (message) => {
     }
 
     // Bug management commands
-    if (message.content.startsWith('/') && message.author.bot === false) {
+    if (message.content.startsWith('/') && !message.author.bot) {
         const args = message.content.slice(1).split(' ');
         const command = args[0].toLowerCase();
 
@@ -156,7 +155,8 @@ client.on('messageCreate', async (message) => {
 
             let bugList = '';
             for (const [bugId, bug] of bugReports) {
-                bugList += `**ID:** ${bugId} | **By:** ${bug.username} | **Time:** <t:${Math.floor(bug.timestamp / 1000)}:R>\n`;
+                const timeAgo = Math.floor((Date.now() - bug.timestamp) / 1000 / 60); // minutes ago
+                bugList += `**ID:** ${bugId} | **By:** ${bug.username} | **${timeAgo} min ago**\n`;
             }
 
             embed.addFields({ name: 'Bugs', value: bugList || 'No bugs' });
@@ -190,7 +190,7 @@ client.on('interactionCreate', async (interaction) => {
             .setCustomId('bug_description')
             .setLabel('Bug Description')
             .setStyle(TextInputStyle.Paragraph)
-            .setPlaceholder('Describe the bug in detail...')
+            .setPlaceholder('Describe the bug in detail... What happened? When? How to reproduce?')
             .setRequired(true)
             .setMaxLength(1000);
 
@@ -200,6 +200,16 @@ client.on('interactionCreate', async (interaction) => {
         modal.addComponents(firstActionRow, secondActionRow);
 
         await interaction.showModal(modal);
+    }
+
+    // Handle copy button
+    if (interaction.isButton() && interaction.customId.startsWith('copy_')) {
+        const bugId = interaction.customId.replace('copy_', '');
+        
+        await interaction.reply({
+            content: `📋 Bug ID copied: \`${bugId}\`\n\nUse this ID with commands:\n\`/bugfix ${bugId}\` - Mark as fixed\n\`/bugnotfix ${bugId}\` - Mark as not fixed\n\`/bugdismiss ${bugId}\` - Dismiss bug`,
+            ephemeral: true
+        });
     }
 });
 
@@ -227,12 +237,12 @@ client.on('interactionCreate', async (interaction) => {
 
         // Send confirmation to user
         const userEmbed = new EmbedBuilder()
-            .setTitle('✅ Bug Report Submitted')
+            .setTitle('✅ Bug Report Submitted Successfully!')
             .setColor(0x00FF00)
             .addFields(
-                { name: 'Bug ID', value: bugId, inline: true },
-                { name: 'Username', value: discordUsername, inline: true },
-                { name: 'Description', value: bugDescription.length > 500 ? bugDescription.substring(0, 500) + '...' : bugDescription, inline: false }
+                { name: '🆔 Bug ID', value: bugId, inline: true },
+                { name: '👤 Your Username', value: discordUsername, inline: true },
+                { name: '📝 Description', value: bugDescription.length > 500 ? bugDescription.substring(0, 500) + '...' : bugDescription, inline: false }
             )
             .setFooter({ text: 'We will review your bug report soon' })
             .setTimestamp();
@@ -242,45 +252,45 @@ client.on('interactionCreate', async (interaction) => {
             ephemeral: true
         });
 
-        // Send to bug channel with copyable ID
+        // ✅ SEND TO BUG CHANNEL - এই অংশে SMS পাঠানো হবে
         const bugChannel = client.channels.cache.get(BUG_CHANNEL_ID);
         if (bugChannel) {
-            const bugEmbed = new EmbedBuilder()
-                .setTitle('🐛 New Bug Report')
-                .setColor(0xFF0000)
-                .addFields(
-                    { name: 'Bug ID', value: `\`${bugId}\``, inline: true },
-                    { name: 'Discord Username', value: discordUsername, inline: true },
-                    { name: 'User ID', value: interaction.user.id, inline: true },
-                    { name: 'Bug Description', value: bugDescription, inline: false }
-                )
-                .setFooter({ text: `Use /bugfix ${bugId} to mark as fixed` })
-                .setTimestamp();
+            try {
+                const bugEmbed = new EmbedBuilder()
+                    .setTitle('🐛 🚨 NEW BUG REPORT 🚨')
+                    .setColor(0xFF0000)
+                    .addFields(
+                        { name: '🆔 BUG ID', value: `\`${bugId}\``, inline: true },
+                        { name: '👤 DISCORD USERNAME', value: discordUsername, inline: true },
+                        { name: '🆔 USER ID', value: interaction.user.id, inline: true },
+                        { name: '📅 REPORT TIME', value: `<t:${Math.floor(timestamp/1000)}:F>`, inline: false },
+                        { name: '📝 BUG DESCRIPTION', value: bugDescription, inline: false }
+                    )
+                    .setFooter({ text: `Use /bugfix ${bugId} to mark as fixed` })
+                    .setTimestamp();
 
-            const copyButton = new ActionRowBuilder().addComponents(
-                new ButtonBuilder()
-                    .setCustomId(`copy_${bugId}`)
-                    .setLabel('Copy Bug ID')
-                    .setStyle(ButtonStyle.Second)
-                    .setEmoji('📋')
-            );
+                const copyButton = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`copy_${bugId}`)
+                        .setLabel('Copy Bug ID')
+                        .setStyle(ButtonStyle.Second)
+                        .setEmoji('📋')
+                );
 
-            await bugChannel.send({ 
-                content: `📢 **NEW BUG REPORT** - Bug ID: \`${bugId}\``,
-                embeds: [bugEmbed],
-                components: [copyButton]
-            });
+                // ✅ এই লাইনে SMS পাঠানো হচ্ছে
+                await bugChannel.send({ 
+                    content: `@everyone\n📢 **🚨 NEW BUG REPORT RECEIVED! 🚨**\n**Bug ID:** \`${bugId}\``,
+                    embeds: [bugEmbed],
+                    components: [copyButton]
+                });
+                
+                console.log(`✅ SMS sent to bug channel: ${BUG_CHANNEL_ID}`);
+            } catch (error) {
+                console.error('❌ Error sending to bug channel:', error);
+            }
+        } else {
+            console.error(`❌ Bug channel not found! ID: ${BUG_CHANNEL_ID}`);
         }
-    }
-
-    // Handle copy button
-    if (interaction.isButton() && interaction.customId.startsWith('copy_')) {
-        const bugId = interaction.customId.replace('copy_', '');
-        
-        await interaction.reply({
-            content: `📋 Bug ID copied: \`${bugId}\`\nUse this ID with commands like:\n\`/bugfix ${bugId}\`\n\`/bugnotfix ${bugId}\`\n\`/bugdismiss ${bugId}\``,
-            ephemeral: true
-        });
     }
 });
 
