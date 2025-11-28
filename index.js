@@ -15,6 +15,9 @@ const client = new Client({
 const bugReports = new Map();
 const BUG_CHANNEL_ID = '1443929342492282920';
 
+// Store user's last modal data to clear it
+const userModalCache = new Map();
+
 client.once('ready', () => {
     console.log(`✅ Bug Report Bot is online as ${client.user.tag}`);
     console.log(`📋 Bug Channel ID: ${BUG_CHANNEL_ID}`);
@@ -54,12 +57,15 @@ client.on('messageCreate', async (message) => {
     }
 });
 
-// Handle bug report button click
+// Handle bug report button click - FIXED VERSION
 client.on('interactionCreate', async (interaction) => {
     if (!interaction.isButton()) return;
 
     if (interaction.customId === 'report_bug') {
         console.log(`🔘 Bug report button clicked by ${interaction.user.tag}`);
+        
+        // Clear previous modal data for this user
+        userModalCache.delete(interaction.user.id);
         
         const modal = new ModalBuilder()
             .setCustomId('bug_report_modal')
@@ -71,7 +77,8 @@ client.on('interactionCreate', async (interaction) => {
             .setStyle(TextInputStyle.Short)
             .setPlaceholder('Enter your Discord username')
             .setRequired(true)
-            .setMaxLength(32);
+            .setMaxLength(32)
+            .setValue(''); // ✅ Force empty value
 
         const bugDescriptionInput = new TextInputBuilder()
             .setCustomId('bug_description')
@@ -79,7 +86,8 @@ client.on('interactionCreate', async (interaction) => {
             .setStyle(TextInputStyle.Paragraph)
             .setPlaceholder('Describe the bug in detail...')
             .setRequired(true)
-            .setMaxLength(1000);
+            .setMaxLength(1000)
+            .setValue(''); // ✅ Force empty value
 
         const firstActionRow = new ActionRowBuilder().addComponents(usernameInput);
         const secondActionRow = new ActionRowBuilder().addComponents(bugDescriptionInput);
@@ -90,7 +98,7 @@ client.on('interactionCreate', async (interaction) => {
     }
 });
 
-// Handle bug report modal submission - FIXED VERSION
+// Handle bug report modal submission
 client.on('interactionCreate', async (interaction) => {
     if (!interaction.isModalSubmit()) return;
 
@@ -114,7 +122,10 @@ client.on('interactionCreate', async (interaction) => {
 
         console.log(`✅ Bug stored: ${bugId} by ${discordUsername}`);
 
-        // ✅ FIXED: Show bug description in user confirmation
+        // Clear user modal cache after successful submission
+        userModalCache.delete(interaction.user.id);
+
+        // Show bug description in user confirmation
         const userEmbed = new EmbedBuilder()
             .setTitle('✅ Bug Report Submitted Successfully!')
             .setColor(0x00FF00)
@@ -170,6 +181,18 @@ client.on('interactionCreate', async (interaction) => {
         }
     }
 });
+
+// Clear modal cache periodically (every 10 minutes)
+setInterval(() => {
+    const now = Date.now();
+    const TEN_MINUTES = 10 * 60 * 1000;
+    
+    for (const [userId, timestamp] of userModalCache.entries()) {
+        if (now - timestamp > TEN_MINUTES) {
+            userModalCache.delete(userId);
+        }
+    }
+}, 10 * 60 * 1000);
 
 // Admin commands
 client.on('messageCreate', async (message) => {
