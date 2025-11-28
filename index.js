@@ -15,9 +15,6 @@ const client = new Client({
 const bugReports = new Map();
 const BUG_CHANNEL_ID = '1443929342492282920';
 
-// Store user's last modal data to clear it
-const userModalCache = new Map();
-
 client.once('ready', () => {
     console.log(`✅ Bug Report Bot is online as ${client.user.tag}`);
     console.log(`📋 Bug Channel ID: ${BUG_CHANNEL_ID}`);
@@ -64,9 +61,6 @@ client.on('interactionCreate', async (interaction) => {
     if (interaction.customId === 'report_bug') {
         console.log(`🔘 Bug report button clicked by ${interaction.user.tag}`);
         
-        // Clear previous modal data for this user
-        userModalCache.delete(interaction.user.id);
-        
         const modal = new ModalBuilder()
             .setCustomId('bug_report_modal')
             .setTitle('Report a Bug');
@@ -77,8 +71,7 @@ client.on('interactionCreate', async (interaction) => {
             .setStyle(TextInputStyle.Short)
             .setPlaceholder('Enter your Discord username')
             .setRequired(true)
-            .setMaxLength(32)
-            .setValue(''); // ✅ Force empty value
+            .setMaxLength(32);
 
         const bugDescriptionInput = new TextInputBuilder()
             .setCustomId('bug_description')
@@ -86,8 +79,7 @@ client.on('interactionCreate', async (interaction) => {
             .setStyle(TextInputStyle.Paragraph)
             .setPlaceholder('Describe the bug in detail...')
             .setRequired(true)
-            .setMaxLength(1000)
-            .setValue(''); // ✅ Force empty value
+            .setMaxLength(1000);
 
         const firstActionRow = new ActionRowBuilder().addComponents(usernameInput);
         const secondActionRow = new ActionRowBuilder().addComponents(bugDescriptionInput);
@@ -108,6 +100,14 @@ client.on('interactionCreate', async (interaction) => {
         const discordUsername = interaction.fields.getTextInputValue('discord_username');
         const bugDescription = interaction.fields.getTextInputValue('bug_description');
 
+        // ✅ VALIDATION: Check if fields are empty
+        if (!discordUsername.trim() || !bugDescription.trim()) {
+            return await interaction.reply({
+                content: '❌ **Please fill in all required fields!**\n\n- Discord Username\n- Bug Description',
+                ephemeral: true
+            });
+        }
+
         // Generate unique bug ID
         const bugId = 'BUG_' + Math.random().toString(36).substring(2, 8).toUpperCase();
         const timestamp = Date.now();
@@ -121,9 +121,6 @@ client.on('interactionCreate', async (interaction) => {
         });
 
         console.log(`✅ Bug stored: ${bugId} by ${discordUsername}`);
-
-        // Clear user modal cache after successful submission
-        userModalCache.delete(interaction.user.id);
 
         // Show bug description in user confirmation
         const userEmbed = new EmbedBuilder()
@@ -181,18 +178,6 @@ client.on('interactionCreate', async (interaction) => {
         }
     }
 });
-
-// Clear modal cache periodically (every 10 minutes)
-setInterval(() => {
-    const now = Date.now();
-    const TEN_MINUTES = 10 * 60 * 1000;
-    
-    for (const [userId, timestamp] of userModalCache.entries()) {
-        if (now - timestamp > TEN_MINUTES) {
-            userModalCache.delete(userId);
-        }
-    }
-}, 10 * 60 * 1000);
 
 // Admin commands
 client.on('messageCreate', async (message) => {
