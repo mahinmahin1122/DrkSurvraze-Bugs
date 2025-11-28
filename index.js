@@ -109,13 +109,6 @@ client.on('messageCreate', async (message) => {
             return message.reply('❌ Bug ID not found!');
         }
 
-        // ✅ Cancel the auto-delete timer for this bug
-        if (bugTimers.has(bugId)) {
-            clearTimeout(bugTimers.get(bugId));
-            bugTimers.delete(bugId);
-            console.log(`⏹️ Cancelled auto-delete timer for: ${bugId}`);
-        }
-
         // Send confirmation in current channel
         const embed = new EmbedBuilder()
             .setTitle('✅ Bug Fixed')
@@ -154,12 +147,10 @@ client.on('messageCreate', async (message) => {
             await message.reply(`⚠️ Bug marked as fixed but could not send DM to ${bug.username}`);
         }
 
-        // Delete the original bug message from bug channel
-        await deleteBugMessage(bugId);
-
-        // Remove from storage
-        bugReports.delete(bugId);
-        bugMessages.delete(bugId);
+        // ✅ START 10 SECOND TIMER AFTER /bugfix COMMAND
+        startDeleteTimer(bugId);
+        
+        console.log(`⏰ 10-second delete timer started for: ${bugId}`);
     }
 
     // Handle /bugnotfix command
@@ -174,13 +165,6 @@ client.on('messageCreate', async (message) => {
         
         if (!bug) {
             return message.reply('❌ Bug ID not found!');
-        }
-
-        // ✅ Cancel the auto-delete timer for this bug
-        if (bugTimers.has(bugId)) {
-            clearTimeout(bugTimers.get(bugId));
-            bugTimers.delete(bugId);
-            console.log(`⏹️ Cancelled auto-delete timer for: ${bugId}`);
         }
 
         const embed = new EmbedBuilder()
@@ -217,12 +201,10 @@ client.on('messageCreate', async (message) => {
             console.log('Could not send DM to user');
         }
 
-        // Delete the original bug message from bug channel
-        await deleteBugMessage(bugId);
-
-        // Remove from storage
-        bugReports.delete(bugId);
-        bugMessages.delete(bugId);
+        // ✅ START 10 SECOND TIMER AFTER /bugnotfix COMMAND
+        startDeleteTimer(bugId);
+        
+        console.log(`⏰ 10-second delete timer started for: ${bugId}`);
     }
 
     // Handle /bugdismiss command
@@ -237,13 +219,6 @@ client.on('messageCreate', async (message) => {
         
         if (!bug) {
             return message.reply('❌ Bug ID not found!');
-        }
-
-        // ✅ Cancel the auto-delete timer for this bug
-        if (bugTimers.has(bugId)) {
-            clearTimeout(bugTimers.get(bugId));
-            bugTimers.delete(bugId);
-            console.log(`⏹️ Cancelled auto-delete timer for: ${bugId}`);
         }
 
         // Send DM to user - WITH BUG DESCRIPTION
@@ -267,12 +242,11 @@ client.on('messageCreate', async (message) => {
             console.log('Could not send DM to user');
         }
 
-        // Delete the original bug message from bug channel
-        await deleteBugMessage(bugId);
-
-        bugReports.delete(bugId);
-        bugMessages.delete(bugId);
-        await message.reply(`✅ Bug ${bugId} has been dismissed and removed.`);
+        // ✅ START 10 SECOND TIMER AFTER /bugdismiss COMMAND
+        startDeleteTimer(bugId);
+        
+        await message.reply(`✅ Bug ${bugId} has been dismissed. Message will delete in 10 seconds.`);
+        console.log(`⏰ 10-second delete timer started for: ${bugId}`);
     }
 
     // Handle /buglist command
@@ -284,13 +258,12 @@ client.on('messageCreate', async (message) => {
         const embed = new EmbedBuilder()
             .setTitle('🐛 Pending Bug Reports')
             .setColor(0xFFFF00)
-            .setDescription(`Total pending bugs: ${bugReports.size}\n*Auto-deletes after 10 seconds*`);
+            .setDescription(`Total pending bugs: ${bugReports.size}`);
 
         let bugList = '';
         for (const [bugId, bug] of bugReports) {
             const timePassed = Math.floor((Date.now() - bug.timestamp) / 1000);
-            const timeLeft = 10 - timePassed;
-            bugList += `**${bugId}** - ${bug.username} (${timeLeft > 0 ? timeLeft + 's left' : 'deleting now'})\n`;
+            bugList += `**${bugId}** - ${bug.username} (${timePassed}s ago)\n`;
         }
 
         embed.addFields({ name: 'Bugs', value: bugList || 'No bugs' });
@@ -399,7 +372,6 @@ client.on('interactionCreate', async (interaction) => {
                         { name: 'Username', value: interaction.user.username, inline: true },
                         { name: 'Description', value: bugDescription.substring(0, 1500), inline: false }
                     )
-                    .setFooter({ text: 'Auto-deletes in 10 seconds' })
                     .setTimestamp();
 
                 const sentMessage = await bugChannel.send({
@@ -411,25 +383,35 @@ client.on('interactionCreate', async (interaction) => {
                 bugMessages.set(bugId, sentMessage.id);
                 console.log(`✅ Bug message stored: ${bugId} -> ${sentMessage.id}`);
                 
-                // ✅ Set auto-delete timer for this bug
-                const timer = setTimeout(async () => {
-                    if (bugReports.has(bugId)) {
-                        console.log(`🕒 Auto-deleting bug: ${bugId}`);
-                        await deleteBugMessage(bugId);
-                        bugReports.delete(bugId);
-                        bugMessages.delete(bugId);
-                        bugTimers.delete(bugId);
-                    }
-                }, AUTO_DELETE_TIME);
-
-                bugTimers.set(bugId, timer);
-                console.log(`⏰ Auto-delete timer set for: ${bugId}`);
+                // ❌ NO AUTO-DELETE TIMER HERE - Timer will start only after /bugfix command
             }
         } catch (error) {
             console.error('❌ ERROR sending to bug channel:', error);
         }
     }
 });
+
+// Function to start 10-second delete timer
+function startDeleteTimer(bugId) {
+    // Clear existing timer if any
+    if (bugTimers.has(bugId)) {
+        clearTimeout(bugTimers.get(bugId));
+    }
+
+    // Start new 10-second timer
+    const timer = setTimeout(async () => {
+        if (bugReports.has(bugId)) {
+            console.log(`🕒 Auto-deleting bug after /bugfix: ${bugId}`);
+            await deleteBugMessage(bugId);
+            bugReports.delete(bugId);
+            bugMessages.delete(bugId);
+            bugTimers.delete(bugId);
+        }
+    }, AUTO_DELETE_TIME);
+
+    bugTimers.set(bugId, timer);
+    console.log(`⏰ 10-second delete timer started for: ${bugId}`);
+}
 
 // Function to delete bug message from bug channel
 async function deleteBugMessage(bugId) {
