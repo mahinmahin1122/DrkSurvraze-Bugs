@@ -14,38 +14,18 @@ const client = new Client({
 // Bug report storage
 const bugReports = new Map();
 const BUG_CHANNEL_ID = '1443929342492282920';
-const ALLOWED_CHANNEL_ID = '1443932014750335141'; // ✅ শুধু এই চ্যানেলে কাজ করবে
+const ALLOWED_CHANNEL_ID = '1443932014750335141';
 
 client.once('ready', () => {
     console.log(`✅ Bug Report Bot is online as ${client.user.tag}`);
     console.log(`📋 Bug Channel ID: ${BUG_CHANNEL_ID}`);
     console.log(`🎯 Allowed Channel ID: ${ALLOWED_CHANNEL_ID}`);
-    
-    // Check channel access
-    const bugChannel = client.channels.cache.get(BUG_CHANNEL_ID);
-    if (bugChannel) {
-        console.log(`✅ Bug channel found: ${bugChannel.name}`);
-    } else {
-        console.log(`❌ Bug channel NOT found! Check ID: ${BUG_CHANNEL_ID}`);
-    }
-    
-    const allowedChannel = client.channels.cache.get(ALLOWED_CHANNEL_ID);
-    if (allowedChannel) {
-        console.log(`✅ Allowed channel found: ${allowedChannel.name}`);
-    } else {
-        console.log(`❌ Allowed channel NOT found! Check ID: ${ALLOWED_CHANNEL_ID}`);
-    }
 });
 
 // Handle bug report command - ONLY IN ALLOWED CHANNEL
 client.on('messageCreate', async (message) => {
     if (message.content === '!bug' && !message.author.bot) {
-        console.log(`🐛 Bug command from ${message.author.tag} in #${message.channel.name}`);
-        
-        // ✅ Check if command is used in allowed channel
         if (message.channel.id !== ALLOWED_CHANNEL_ID) {
-            console.log(`❌ Command used in wrong channel: ${message.channel.id}`);
-            
             const errorEmbed = new EmbedBuilder()
                 .setTitle('❌ Command Not Allowed Here')
                 .setDescription(`**!bug** command can only be used in <#${ALLOWED_CHANNEL_ID}> channel.`)
@@ -77,6 +57,141 @@ client.on('messageCreate', async (message) => {
             components: [reportButton]
         });
     }
+
+    // Handle /bugfix command - FIXED VERSION
+    if (message.content.startsWith('/bugfix') && !message.author.bot) {
+        const args = message.content.split(' ');
+        if (args.length < 2) {
+            return message.reply('❌ Usage: `/bugfix <bug_id>`');
+        }
+        
+        const bugId = args[1];
+        const bug = bugReports.get(bugId);
+        
+        if (!bug) {
+            return message.reply('❌ Bug ID not found!');
+        }
+
+        // Send confirmation in current channel
+        const embed = new EmbedBuilder()
+            .setTitle('✅ Bug Fixed')
+            .setColor(0x00FF00)
+            .addFields(
+                { name: 'Bug ID', value: bugId, inline: true },
+                { name: 'Reported By', value: bug.username, inline: true },
+                { name: 'Status', value: '✅ FIXED', inline: true }
+            )
+            .setFooter({ text: 'Bug Report System' })
+            .setTimestamp();
+
+        await message.channel.send({ embeds: [embed] });
+        
+        // ✅ Send DM to the user who reported the bug
+        try {
+            const user = await client.users.fetch(bug.userId);
+            const dmEmbed = new EmbedBuilder()
+                .setTitle('🎉 Your Bug Has Been Fixed!')
+                .setColor(0x00FF00)
+                .addFields(
+                    { name: 'Bug ID', value: bugId, inline: true },
+                    { name: 'Your Username', value: bug.username, inline: true },
+                    { name: 'Status', value: '✅ FIXED', inline: true },
+                    { name: 'Bug Description', value: bug.description.length > 500 ? bug.description.substring(0, 500) + '...' : bug.description, inline: false }
+                )
+                .setDescription('Thank you for reporting the bug! Your issue has been resolved.')
+                .setFooter({ text: 'DrkSurvraze Bug System' })
+                .setTimestamp();
+
+            await user.send({ embeds: [dmEmbed] });
+            console.log(`✅ DM sent to user: ${bug.username} (${bug.userId})`);
+            
+        } catch (error) {
+            console.log(`❌ Could not send DM to user: ${bug.username}`);
+            await message.reply(`⚠️ Bug marked as fixed but could not send DM to ${bug.username}`);
+        }
+
+        // Remove from storage
+        bugReports.delete(bugId);
+    }
+
+    // Handle other admin commands
+    if (message.content.startsWith('/') && !message.author.bot) {
+        const args = message.content.slice(1).split(' ');
+        const command = args[0].toLowerCase();
+
+        if (command === 'bugnotfix') {
+            if (args.length < 2) {
+                return message.reply('❌ Usage: /bugnotfix <bug_id>');
+            }
+            
+            const bugId = args[1];
+            const bug = bugReports.get(bugId);
+            
+            if (!bug) {
+                return message.reply('❌ Bug ID not found!');
+            }
+
+            const embed = new EmbedBuilder()
+                .setTitle('❌ Bug Not Fixed')
+                .setColor(0xFF0000)
+                .addFields(
+                    { name: 'Bug ID', value: bugId, inline: true },
+                    { name: 'Reported By', value: bug.username, inline: true },
+                    { name: 'Status', value: '❌ NOT FIXED', inline: true }
+                )
+                .setFooter({ text: 'Bug Report System' })
+                .setTimestamp();
+
+            await message.channel.send({ embeds: [embed] });
+        }
+
+        if (command === 'bugdismiss') {
+            if (args.length < 2) {
+                return message.reply('❌ Usage: /bugdismiss <bug_id>');
+            }
+            
+            const bugId = args[1];
+            const bug = bugReports.get(bugId);
+            
+            if (!bug) {
+                return message.reply('❌ Bug ID not found!');
+            }
+
+            // Send DM to user
+            try {
+                const user = await client.users.fetch(bug.userId);
+                await user.send({
+                    content: `📋 **Your bug report has been dismissed**\n\n**Bug ID:** ${bugId}\n**Status:** ❌ Dismissed\n\nIf you think this was a mistake, please report again.`
+                });
+            } catch (error) {
+                console.log('Could not send DM to user');
+            }
+
+            bugReports.delete(bugId);
+            await message.reply(`✅ Bug ${bugId} has been dismissed and removed.`);
+        }
+
+        if (command === 'buglist') {
+            if (bugReports.size === 0) {
+                return message.reply('📝 No pending bugs found.');
+            }
+
+            const embed = new EmbedBuilder()
+                .setTitle('🐛 Pending Bug Reports')
+                .setColor(0xFFFF00)
+                .setDescription(`Total pending bugs: ${bugReports.size}`);
+
+            let bugList = '';
+            for (const [bugId, bug] of bugReports) {
+                const timeAgo = Math.floor((Date.now() - bug.timestamp) / 1000 / 60);
+                bugList += `**${bugId}** - ${bug.username} (${timeAgo} min ago)\n`;
+            }
+
+            embed.addFields({ name: 'Bugs', value: bugList || 'No bugs' });
+
+            await message.channel.send({ embeds: [embed] });
+        }
+    }
 });
 
 // Handle bug report button click
@@ -84,12 +199,7 @@ client.on('interactionCreate', async (interaction) => {
     if (!interaction.isButton()) return;
 
     if (interaction.customId === 'report_bug') {
-        console.log(`🔘 Bug report button clicked by ${interaction.user.tag}`);
-        
-        // ✅ Check if button is clicked in allowed channel
         if (interaction.channel.id !== ALLOWED_CHANNEL_ID) {
-            console.log(`❌ Button clicked in wrong channel: ${interaction.channel.id}`);
-            
             const errorEmbed = new EmbedBuilder()
                 .setTitle('❌ Action Not Allowed Here')
                 .setDescription(`Bug reports can only be submitted from <#${ALLOWED_CHANNEL_ID}> channel.`)
@@ -135,12 +245,7 @@ client.on('interactionCreate', async (interaction) => {
     if (!interaction.isModalSubmit()) return;
 
     if (interaction.customId === 'bug_report_modal') {
-        console.log(`📄 Modal submitted by ${interaction.user.tag}`);
-        
-        // ✅ Check if modal is submitted from allowed channel
         if (interaction.channel.id !== ALLOWED_CHANNEL_ID) {
-            console.log(`❌ Modal submitted from wrong channel: ${interaction.channel.id}`);
-            
             return await interaction.reply({
                 content: '❌ **Error:** This form can only be used in the designated bug report channel.',
                 ephemeral: true
@@ -150,7 +255,6 @@ client.on('interactionCreate', async (interaction) => {
         const discordUsername = interaction.fields.getTextInputValue('discord_username');
         const bugDescription = interaction.fields.getTextInputValue('bug_description');
 
-        // ✅ VALIDATION: Check if fields are empty
         if (!discordUsername.trim() || !bugDescription.trim()) {
             return await interaction.reply({
                 content: '❌ **Please fill in all required fields!**\n\n- Discord Username\n- Bug Description',
@@ -158,11 +262,9 @@ client.on('interactionCreate', async (interaction) => {
             });
         }
 
-        // Generate unique bug ID
         const bugId = 'BUG_' + Math.random().toString(36).substring(2, 8).toUpperCase();
         const timestamp = Date.now();
 
-        // Store bug report
         bugReports.set(bugId, {
             username: discordUsername,
             description: bugDescription,
@@ -172,7 +274,6 @@ client.on('interactionCreate', async (interaction) => {
 
         console.log(`✅ Bug stored: ${bugId} by ${discordUsername}`);
 
-        // Show bug description in user confirmation
         const userEmbed = new EmbedBuilder()
             .setTitle('✅ Bug Report Submitted Successfully!')
             .setColor(0x00FF00)
@@ -191,66 +292,25 @@ client.on('interactionCreate', async (interaction) => {
 
         // Send to bug channel
         try {
-            console.log(`📤 Attempting to send to channel: ${BUG_CHANNEL_ID}`);
-            
             const bugChannel = client.channels.cache.get(BUG_CHANNEL_ID);
-            
-            if (!bugChannel) {
-                console.log(`❌ Channel not found in cache. Fetching...`);
-                const fetchedChannel = await client.channels.fetch(BUG_CHANNEL_ID).catch(console.error);
-                if (fetchedChannel) {
-                    console.log(`✅ Channel fetched: ${fetchedChannel.name}`);
-                } else {
-                    console.log(`❌ Channel cannot be fetched!`);
-                    return;
-                }
+            if (bugChannel) {
+                const bugEmbed = new EmbedBuilder()
+                    .setTitle('🚨 NEW BUG REPORT')
+                    .setColor(0xFF0000)
+                    .addFields(
+                        { name: 'Bug ID', value: bugId, inline: true },
+                        { name: 'Username', value: discordUsername, inline: true },
+                        { name: 'Description', value: bugDescription.substring(0, 1000), inline: false }
+                    )
+                    .setTimestamp();
+
+                await bugChannel.send({
+                    content: `@everyone`,
+                    embeds: [bugEmbed]
+                });
             }
-
-            const bugEmbed = new EmbedBuilder()
-                .setTitle('🚨 NEW BUG REPORT')
-                .setColor(0xFF0000)
-                .addFields(
-                    { name: 'Bug ID', value: bugId, inline: true },
-                    { name: 'Username', value: discordUsername, inline: true },
-                    { name: 'Description', value: bugDescription.substring(0, 1000), inline: false }
-                )
-                .setTimestamp();
-
-            const sentMessage = await bugChannel.send({
-                content: `@everyone`,
-                embeds: [bugEmbed]
-            });
-
-            console.log(`✅ SMS SENT SUCCESSFULLY to channel! Message ID: ${sentMessage.id}`);
-            
         } catch (error) {
             console.error('❌ ERROR sending to bug channel:', error);
-        }
-    }
-});
-
-// Admin commands - work in any channel
-client.on('messageCreate', async (message) => {
-    if (message.content.startsWith('/') && !message.author.bot) {
-        const args = message.content.slice(1).split(' ');
-        const command = args[0].toLowerCase();
-
-        if (command === 'buglist') {
-            if (bugReports.size === 0) {
-                return message.reply('No pending bugs.');
-            }
-
-            let bugList = '';
-            for (const [bugId, bug] of bugReports) {
-                bugList += `**${bugId}** - ${bug.username}\n`;
-            }
-
-            const embed = new EmbedBuilder()
-                .setTitle('Pending Bugs')
-                .setDescription(bugList)
-                .setColor(0xFFFF00);
-
-            await message.channel.send({ embeds: [embed] });
         }
     }
 });
