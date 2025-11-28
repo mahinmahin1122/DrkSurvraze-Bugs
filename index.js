@@ -14,10 +14,12 @@ const client = new Client({
 // Bug report storage
 const bugReports = new Map();
 const BUG_CHANNEL_ID = '1443929342492282920';
+const ALLOWED_CHANNEL_ID = '1443932014750335141'; // ✅ শুধু এই চ্যানেলে কাজ করবে
 
 client.once('ready', () => {
     console.log(`✅ Bug Report Bot is online as ${client.user.tag}`);
     console.log(`📋 Bug Channel ID: ${BUG_CHANNEL_ID}`);
+    console.log(`🎯 Allowed Channel ID: ${ALLOWED_CHANNEL_ID}`);
     
     // Check channel access
     const bugChannel = client.channels.cache.get(BUG_CHANNEL_ID);
@@ -26,12 +28,35 @@ client.once('ready', () => {
     } else {
         console.log(`❌ Bug channel NOT found! Check ID: ${BUG_CHANNEL_ID}`);
     }
+    
+    const allowedChannel = client.channels.cache.get(ALLOWED_CHANNEL_ID);
+    if (allowedChannel) {
+        console.log(`✅ Allowed channel found: ${allowedChannel.name}`);
+    } else {
+        console.log(`❌ Allowed channel NOT found! Check ID: ${ALLOWED_CHANNEL_ID}`);
+    }
 });
 
-// Handle bug report command
+// Handle bug report command - ONLY IN ALLOWED CHANNEL
 client.on('messageCreate', async (message) => {
     if (message.content === '!bug' && !message.author.bot) {
         console.log(`🐛 Bug command from ${message.author.tag} in #${message.channel.name}`);
+        
+        // ✅ Check if command is used in allowed channel
+        if (message.channel.id !== ALLOWED_CHANNEL_ID) {
+            console.log(`❌ Command used in wrong channel: ${message.channel.id}`);
+            
+            const errorEmbed = new EmbedBuilder()
+                .setTitle('❌ Command Not Allowed Here')
+                .setDescription(`**!bug** command can only be used in <#${ALLOWED_CHANNEL_ID}> channel.`)
+                .setColor(0xFF0000)
+                .setFooter({ text: 'Please use the correct channel' });
+                
+            return await message.reply({
+                embeds: [errorEmbed],
+                ephemeral: true
+            });
+        }
         
         const embed = new EmbedBuilder()
             .setTitle('🐛 Report a Bug')
@@ -54,12 +79,27 @@ client.on('messageCreate', async (message) => {
     }
 });
 
-// Handle bug report button click - FIXED VERSION
+// Handle bug report button click
 client.on('interactionCreate', async (interaction) => {
     if (!interaction.isButton()) return;
 
     if (interaction.customId === 'report_bug') {
         console.log(`🔘 Bug report button clicked by ${interaction.user.tag}`);
+        
+        // ✅ Check if button is clicked in allowed channel
+        if (interaction.channel.id !== ALLOWED_CHANNEL_ID) {
+            console.log(`❌ Button clicked in wrong channel: ${interaction.channel.id}`);
+            
+            const errorEmbed = new EmbedBuilder()
+                .setTitle('❌ Action Not Allowed Here')
+                .setDescription(`Bug reports can only be submitted from <#${ALLOWED_CHANNEL_ID}> channel.`)
+                .setColor(0xFF0000);
+                
+            return await interaction.reply({
+                embeds: [errorEmbed],
+                ephemeral: true
+            });
+        }
         
         const modal = new ModalBuilder()
             .setCustomId('bug_report_modal')
@@ -96,6 +136,16 @@ client.on('interactionCreate', async (interaction) => {
 
     if (interaction.customId === 'bug_report_modal') {
         console.log(`📄 Modal submitted by ${interaction.user.tag}`);
+        
+        // ✅ Check if modal is submitted from allowed channel
+        if (interaction.channel.id !== ALLOWED_CHANNEL_ID) {
+            console.log(`❌ Modal submitted from wrong channel: ${interaction.channel.id}`);
+            
+            return await interaction.reply({
+                content: '❌ **Error:** This form can only be used in the designated bug report channel.',
+                ephemeral: true
+            });
+        }
         
         const discordUsername = interaction.fields.getTextInputValue('discord_username');
         const bugDescription = interaction.fields.getTextInputValue('bug_description');
@@ -179,7 +229,7 @@ client.on('interactionCreate', async (interaction) => {
     }
 });
 
-// Admin commands
+// Admin commands - work in any channel
 client.on('messageCreate', async (message) => {
     if (message.content.startsWith('/') && !message.author.bot) {
         const args = message.content.slice(1).split(' ');
