@@ -22,27 +22,14 @@ const bugMessages = new Map();
 // Auto-delete bug reports after 10 seconds
 const AUTO_DELETE_TIME = 10 * 1000; // 10 seconds
 
+// Store timers for each bug
+const bugTimers = new Map();
+
 client.once('ready', () => {
     console.log(`✅ Bug Report Bot is online as ${client.user.tag}`);
     console.log(`📋 Bug Channel ID: ${BUG_CHANNEL_ID}`);
     console.log(`🎯 Allowed Channel ID: ${ALLOWED_CHANNEL_ID}`);
-    
-    // Start auto-delete interval
-    setInterval(autoDeleteOldBugs, 5 * 1000); // Check every 5 seconds
 });
-
-// Auto-delete old bug reports
-function autoDeleteOldBugs() {
-    const now = Date.now();
-    for (const [bugId, bug] of bugReports.entries()) {
-        if (now - bug.timestamp > AUTO_DELETE_TIME) {
-            console.log(`🕒 Auto-deleting old bug: ${bugId}`);
-            deleteBugMessage(bugId);
-            bugReports.delete(bugId);
-            bugMessages.delete(bugId);
-        }
-    }
-}
 
 // Handle bug report command - ONLY IN ALLOWED CHANNEL
 client.on('messageCreate', async (message) => {
@@ -122,6 +109,13 @@ client.on('messageCreate', async (message) => {
             return message.reply('❌ Bug ID not found!');
         }
 
+        // ✅ Cancel the auto-delete timer for this bug
+        if (bugTimers.has(bugId)) {
+            clearTimeout(bugTimers.get(bugId));
+            bugTimers.delete(bugId);
+            console.log(`⏹️ Cancelled auto-delete timer for: ${bugId}`);
+        }
+
         // Send confirmation in current channel
         const embed = new EmbedBuilder()
             .setTitle('✅ Bug Fixed')
@@ -182,6 +176,13 @@ client.on('messageCreate', async (message) => {
             return message.reply('❌ Bug ID not found!');
         }
 
+        // ✅ Cancel the auto-delete timer for this bug
+        if (bugTimers.has(bugId)) {
+            clearTimeout(bugTimers.get(bugId));
+            bugTimers.delete(bugId);
+            console.log(`⏹️ Cancelled auto-delete timer for: ${bugId}`);
+        }
+
         const embed = new EmbedBuilder()
             .setTitle('❌ Bug Not Fixed')
             .setColor(0xFF0000)
@@ -236,6 +237,13 @@ client.on('messageCreate', async (message) => {
         
         if (!bug) {
             return message.reply('❌ Bug ID not found!');
+        }
+
+        // ✅ Cancel the auto-delete timer for this bug
+        if (bugTimers.has(bugId)) {
+            clearTimeout(bugTimers.get(bugId));
+            bugTimers.delete(bugId);
+            console.log(`⏹️ Cancelled auto-delete timer for: ${bugId}`);
         }
 
         // Send DM to user - WITH BUG DESCRIPTION
@@ -403,15 +411,19 @@ client.on('interactionCreate', async (interaction) => {
                 bugMessages.set(bugId, sentMessage.id);
                 console.log(`✅ Bug message stored: ${bugId} -> ${sentMessage.id}`);
                 
-                // Auto delete after 10 seconds
-                setTimeout(async () => {
+                // ✅ Set auto-delete timer for this bug
+                const timer = setTimeout(async () => {
                     if (bugReports.has(bugId)) {
                         console.log(`🕒 Auto-deleting bug: ${bugId}`);
                         await deleteBugMessage(bugId);
                         bugReports.delete(bugId);
                         bugMessages.delete(bugId);
+                        bugTimers.delete(bugId);
                     }
                 }, AUTO_DELETE_TIME);
+
+                bugTimers.set(bugId, timer);
+                console.log(`⏰ Auto-delete timer set for: ${bugId}`);
             }
         } catch (error) {
             console.error('❌ ERROR sending to bug channel:', error);
