@@ -90,7 +90,7 @@ client.on('interactionCreate', async (interaction) => {
     }
 });
 
-// Handle bug report modal submission - UPDATED VERSION
+// Handle bug report modal submission - FIXED VERSION
 client.on('interactionCreate', async (interaction) => {
     if (!interaction.isModalSubmit()) return;
 
@@ -114,15 +114,16 @@ client.on('interactionCreate', async (interaction) => {
 
         console.log(`✅ Bug stored: ${bugId} by ${discordUsername}`);
 
-        // Send confirmation to user
+        // ✅ FIXED: Show bug description in user confirmation
         const userEmbed = new EmbedBuilder()
-            .setTitle('✅ Bug Report Submitted!')
+            .setTitle('✅ Bug Report Submitted Successfully!')
             .setColor(0x00FF00)
             .addFields(
-                { name: 'Bug ID', value: bugId, inline: true },
-                { name: 'Username', value: discordUsername, inline: true }
+                { name: '🆔 Bug ID', value: bugId, inline: true },
+                { name: '👤 Your Username', value: discordUsername, inline: true },
+                { name: '📝 Bug Description', value: bugDescription.length > 500 ? bugDescription.substring(0, 500) + '...' : bugDescription, inline: false }
             )
-            .setFooter({ text: 'We will review your report soon' })
+            .setFooter({ text: 'We will review your bug report soon' })
             .setTimestamp();
 
         await interaction.reply({
@@ -130,7 +131,7 @@ client.on('interactionCreate', async (interaction) => {
             ephemeral: true
         });
 
-        // ✅ UPDATED: Send to bug channel with @everyone mention
+        // Send to bug channel
         try {
             console.log(`📤 Attempting to send to channel: ${BUG_CHANNEL_ID}`);
             
@@ -153,14 +154,12 @@ client.on('interactionCreate', async (interaction) => {
                 .addFields(
                     { name: 'Bug ID', value: bugId, inline: true },
                     { name: 'Username', value: discordUsername, inline: true },
-                    { name: 'User ID', value: interaction.user.id, inline: true },
                     { name: 'Description', value: bugDescription.substring(0, 1000), inline: false }
                 )
                 .setTimestamp();
 
-            // ✅ CHANGED: Removed "NEW BUG REPORT" text and added @everyone mention only
             const sentMessage = await bugChannel.send({
-                content: `@everyone`, // ✅ শুধু mention, অন্য text নেই
+                content: `@everyone`,
                 embeds: [bugEmbed]
             });
 
