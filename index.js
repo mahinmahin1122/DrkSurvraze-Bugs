@@ -19,11 +19,30 @@ const ALLOWED_CHANNEL_ID = '1443932014750335141';
 // Store message IDs for deletion
 const bugMessages = new Map();
 
+// Auto-delete bug reports after 10 seconds
+const AUTO_DELETE_TIME = 10 * 1000; // 10 seconds
+
 client.once('ready', () => {
     console.log(`✅ Bug Report Bot is online as ${client.user.tag}`);
     console.log(`📋 Bug Channel ID: ${BUG_CHANNEL_ID}`);
     console.log(`🎯 Allowed Channel ID: ${ALLOWED_CHANNEL_ID}`);
+    
+    // Start auto-delete interval
+    setInterval(autoDeleteOldBugs, 5 * 1000); // Check every 5 seconds
 });
+
+// Auto-delete old bug reports
+function autoDeleteOldBugs() {
+    const now = Date.now();
+    for (const [bugId, bug] of bugReports.entries()) {
+        if (now - bug.timestamp > AUTO_DELETE_TIME) {
+            console.log(`🕒 Auto-deleting old bug: ${bugId}`);
+            deleteBugMessage(bugId);
+            bugReports.delete(bugId);
+            bugMessages.delete(bugId);
+        }
+    }
+}
 
 // Handle bug report command - ONLY IN ALLOWED CHANNEL
 client.on('messageCreate', async (message) => {
@@ -89,7 +108,7 @@ client.on('messageCreate', async (message) => {
         await message.channel.send({ embeds: [helpEmbed] });
     }
 
-    // Handle /bugfix command
+    // Handle /bugfix command - UPDATED VERSION
     if (message.content.startsWith('/bugfix') && !message.author.bot) {
         const args = message.content.split(' ');
         if (args.length < 2) {
@@ -117,7 +136,7 @@ client.on('messageCreate', async (message) => {
 
         await message.channel.send({ embeds: [embed] });
         
-        // Send DM to the user who reported the bug
+        // Send DM to the user who reported the bug - WITH BUG DESCRIPTION
         try {
             const user = await client.users.fetch(bug.userId);
             const dmEmbed = new EmbedBuilder()
@@ -126,7 +145,8 @@ client.on('messageCreate', async (message) => {
                 .addFields(
                     { name: 'Bug ID', value: bugId, inline: true },
                     { name: 'Your Username', value: bug.username, inline: true },
-                    { name: 'Status', value: '✅ FIXED', inline: true }
+                    { name: 'Status', value: '✅ FIXED', inline: true },
+                    { name: 'Bug Description', value: bug.description.length > 1000 ? bug.description.substring(0, 1000) + '...' : bug.description, inline: false }
                 )
                 .setDescription('Thank you for reporting the bug! Your issue has been resolved.')
                 .setFooter({ text: 'DrkSurvraze Bug System' })
@@ -145,6 +165,7 @@ client.on('messageCreate', async (message) => {
 
         // Remove from storage
         bugReports.delete(bugId);
+        bugMessages.delete(bugId);
     }
 
     // Handle /bugnotfix command
@@ -174,12 +195,23 @@ client.on('messageCreate', async (message) => {
 
         await message.channel.send({ embeds: [embed] });
 
-        // Send DM to user
+        // Send DM to user - WITH BUG DESCRIPTION
         try {
             const user = await client.users.fetch(bug.userId);
-            await user.send({
-                content: `⚠️ **Your bug report could not be fixed**\n\n**Bug ID:** ${bugId}\n**Status:** ❌ Not Fixed\n\nWe were unable to resolve this issue at this time.`
-            });
+            const dmEmbed = new EmbedBuilder()
+                .setTitle('⚠️ Your Bug Could Not Be Fixed')
+                .setColor(0xFFA500)
+                .addFields(
+                    { name: 'Bug ID', value: bugId, inline: true },
+                    { name: 'Your Username', value: bug.username, inline: true },
+                    { name: 'Status', value: '❌ NOT FIXED', inline: true },
+                    { name: 'Bug Description', value: bug.description.length > 1000 ? bug.description.substring(0, 1000) + '...' : bug.description, inline: false }
+                )
+                .setDescription('We were unable to resolve this issue at this time.')
+                .setFooter({ text: 'DrkSurvraze Bug System' })
+                .setTimestamp();
+
+            await user.send({ embeds: [dmEmbed] });
         } catch (error) {
             console.log('Could not send DM to user');
         }
@@ -189,6 +221,7 @@ client.on('messageCreate', async (message) => {
 
         // Remove from storage
         bugReports.delete(bugId);
+        bugMessages.delete(bugId);
     }
 
     // Handle /bugdismiss command
@@ -205,12 +238,23 @@ client.on('messageCreate', async (message) => {
             return message.reply('❌ Bug ID not found!');
         }
 
-        // Send DM to user
+        // Send DM to user - WITH BUG DESCRIPTION
         try {
             const user = await client.users.fetch(bug.userId);
-            await user.send({
-                content: `📋 **Your bug report has been dismissed**\n\n**Bug ID:** ${bugId}\n**Status:** ❌ Dismissed\n\nIf you think this was a mistake, please report again.`
-            });
+            const dmEmbed = new EmbedBuilder()
+                .setTitle('📋 Your Bug Report Has Been Dismissed')
+                .setColor(0xFF0000)
+                .addFields(
+                    { name: 'Bug ID', value: bugId, inline: true },
+                    { name: 'Your Username', value: bug.username, inline: true },
+                    { name: 'Status', value: '❌ DISMISSED', inline: true },
+                    { name: 'Bug Description', value: bug.description.length > 1000 ? bug.description.substring(0, 1000) + '...' : bug.description, inline: false }
+                )
+                .setDescription('If you think this was a mistake, please report again.')
+                .setFooter({ text: 'DrkSurvraze Bug System' })
+                .setTimestamp();
+
+            await user.send({ embeds: [dmEmbed] });
         } catch (error) {
             console.log('Could not send DM to user');
         }
@@ -219,6 +263,7 @@ client.on('messageCreate', async (message) => {
         await deleteBugMessage(bugId);
 
         bugReports.delete(bugId);
+        bugMessages.delete(bugId);
         await message.reply(`✅ Bug ${bugId} has been dismissed and removed.`);
     }
 
@@ -231,12 +276,13 @@ client.on('messageCreate', async (message) => {
         const embed = new EmbedBuilder()
             .setTitle('🐛 Pending Bug Reports')
             .setColor(0xFFFF00)
-            .setDescription(`Total pending bugs: ${bugReports.size}`);
+            .setDescription(`Total pending bugs: ${bugReports.size}\n*Auto-deletes after 10 seconds*`);
 
         let bugList = '';
         for (const [bugId, bug] of bugReports) {
-            const timeAgo = Math.floor((Date.now() - bug.timestamp) / 1000 / 60);
-            bugList += `**${bugId}** - ${bug.username} (${timeAgo} min ago)\n`;
+            const timePassed = Math.floor((Date.now() - bug.timestamp) / 1000);
+            const timeLeft = 10 - timePassed;
+            bugList += `**${bugId}** - ${bug.username} (${timeLeft > 0 ? timeLeft + 's left' : 'deleting now'})\n`;
         }
 
         embed.addFields({ name: 'Bugs', value: bugList || 'No bugs' });
@@ -266,32 +312,24 @@ client.on('interactionCreate', async (interaction) => {
             .setCustomId('bug_report_modal')
             .setTitle('Report a Bug');
 
-        const usernameInput = new TextInputBuilder()
-            .setCustomId('discord_username')
-            .setLabel('Your Discord Username')
-            .setStyle(TextInputStyle.Short)
-            .setPlaceholder('Enter your Discord username')
-            .setRequired(true)
-            .setMaxLength(32);
-
+        // ✅ REMOVED username field, only bug description
         const bugDescriptionInput = new TextInputBuilder()
             .setCustomId('bug_description')
             .setLabel('Bug Description')
             .setStyle(TextInputStyle.Paragraph)
             .setPlaceholder('Describe the bug in detail...')
             .setRequired(true)
-            .setMaxLength(1000);
+            .setMaxLength(2000);
 
-        const firstActionRow = new ActionRowBuilder().addComponents(usernameInput);
-        const secondActionRow = new ActionRowBuilder().addComponents(bugDescriptionInput);
+        const actionRow = new ActionRowBuilder().addComponents(bugDescriptionInput);
 
-        modal.addComponents(firstActionRow, secondActionRow);
+        modal.addComponents(actionRow);
 
         await interaction.showModal(modal);
     }
 });
 
-// Handle bug report modal submission
+// Handle bug report modal submission - UPDATED VERSION
 client.on('interactionCreate', async (interaction) => {
     if (!interaction.isModalSubmit()) return;
 
@@ -303,12 +341,11 @@ client.on('interactionCreate', async (interaction) => {
             });
         }
         
-        const discordUsername = interaction.fields.getTextInputValue('discord_username');
         const bugDescription = interaction.fields.getTextInputValue('bug_description');
 
-        if (!discordUsername.trim() || !bugDescription.trim()) {
+        if (!bugDescription.trim()) {
             return await interaction.reply({
-                content: '❌ **Please fill in all required fields!**\n\n- Discord Username\n- Bug Description',
+                content: '❌ **Please describe the bug!**',
                 ephemeral: true
             });
         }
@@ -316,21 +353,22 @@ client.on('interactionCreate', async (interaction) => {
         const bugId = 'BUG_' + Math.random().toString(36).substring(2, 8).toUpperCase();
         const timestamp = Date.now();
 
+        // ✅ Store with username from interaction user
         bugReports.set(bugId, {
-            username: discordUsername,
+            username: interaction.user.username, // Get username from Discord
             description: bugDescription,
             userId: interaction.user.id,
             timestamp: timestamp
         });
 
-        console.log(`✅ Bug stored: ${bugId} by ${discordUsername}`);
+        console.log(`✅ Bug stored: ${bugId} by ${interaction.user.username}`);
 
         const userEmbed = new EmbedBuilder()
             .setTitle('✅ Bug Report Submitted Successfully!')
             .setColor(0x00FF00)
             .addFields(
                 { name: '🆔 Bug ID', value: bugId, inline: true },
-                { name: '👤 Your Username', value: discordUsername, inline: true },
+                { name: '👤 Your Username', value: interaction.user.username, inline: true },
                 { name: '📝 Bug Description', value: bugDescription.length > 500 ? bugDescription.substring(0, 500) + '...' : bugDescription, inline: false }
             )
             .setFooter({ text: 'We will review your bug report soon' })
@@ -350,9 +388,10 @@ client.on('interactionCreate', async (interaction) => {
                     .setColor(0xFF0000)
                     .addFields(
                         { name: 'Bug ID', value: bugId, inline: true },
-                        { name: 'Username', value: discordUsername, inline: true },
-                        { name: 'Description', value: bugDescription.substring(0, 1000), inline: false }
+                        { name: 'Username', value: interaction.user.username, inline: true },
+                        { name: 'Description', value: bugDescription.substring(0, 1500), inline: false }
                     )
+                    .setFooter({ text: 'Auto-deletes in 10 seconds' })
                     .setTimestamp();
 
                 const sentMessage = await bugChannel.send({
@@ -363,6 +402,16 @@ client.on('interactionCreate', async (interaction) => {
                 // Store message ID for deletion later
                 bugMessages.set(bugId, sentMessage.id);
                 console.log(`✅ Bug message stored: ${bugId} -> ${sentMessage.id}`);
+                
+                // Auto delete after 10 seconds
+                setTimeout(async () => {
+                    if (bugReports.has(bugId)) {
+                        console.log(`🕒 Auto-deleting bug: ${bugId}`);
+                        await deleteBugMessage(bugId);
+                        bugReports.delete(bugId);
+                        bugMessages.delete(bugId);
+                    }
+                }, AUTO_DELETE_TIME);
             }
         } catch (error) {
             console.error('❌ ERROR sending to bug channel:', error);
@@ -377,10 +426,14 @@ async function deleteBugMessage(bugId) {
         if (messageId) {
             const bugChannel = client.channels.cache.get(BUG_CHANNEL_ID);
             if (bugChannel) {
-                const message = await bugChannel.messages.fetch(messageId);
-                if (message) {
-                    await message.delete();
-                    console.log(`✅ Deleted bug message: ${bugId}`);
+                try {
+                    const message = await bugChannel.messages.fetch(messageId);
+                    if (message) {
+                        await message.delete();
+                        console.log(`✅ Deleted bug message: ${bugId}`);
+                    }
+                } catch (fetchError) {
+                    console.log(`❌ Message already deleted: ${bugId}`);
                 }
             }
             bugMessages.delete(bugId);
